@@ -3185,7 +3185,7 @@ body.pdf-viewer-open #pdf-viewer-screen.screen {
 label[for="student-edit-group"],
 #student-edit-group {
   width: 40%;
-  max-width: 400%;
+  max-width: 40%;
   display: block;
 }
 
