@@ -2720,16 +2720,31 @@ function renderSelectedStudentEditor() {
       <label class="student-admin-label" for="student-edit-group">Group</label>
       <input id="student-edit-group" class="student-prefilled-input" type="number" inputmode="numeric" min="0" value="${escapeAttribute(student.classgroup || DEFAULT_STUDENT_GROUP)}" />
 
-      <label class="student-admin-label" for="student-edit-active">Active Status</label>
-      <button
-        id="student-edit-active"
-        type="button"
-        class="student-active-toggle ${student.active ? "is-active" : "is-inactive"}"
-        data-active="${student.active ? "true" : "false"}"
-        onclick="toggleSelectedStudentActive()"
-      >
-        ${student.active ? "Active" : "Inactive"}
-      </button>
+      <div class="student-edit-two-column-row">
+  <div class="student-edit-field-half">
+    <label class="student-admin-label" for="student-edit-group">Group</label>
+    <input
+      id="student-edit-group"
+      class="student-prefilled-input"
+      type="number"
+      inputmode="numeric"
+      min="0"
+      value="${escapeAttribute(student.classgroup || DEFAULT_STUDENT_GROUP)}"
+    />
+  </div>
+
+  <div class="student-edit-field-half">
+    <label class="student-admin-label">Active Status</label>
+    <button
+      id="student-edit-active-btn"
+      class="student-active-toggle"
+      type="button"
+      onclick="toggleStudentEditActiveStatus()"
+    >
+      Active
+    </button>
+  </div>
+</div>
     </div>
 
     <div class="student-admin-action-grid">
