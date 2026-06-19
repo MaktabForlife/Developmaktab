@@ -3145,13 +3145,13 @@ body.pdf-viewer-open #pdf-viewer-screen.screen {
 .student-active-toggle.is-active,
 .student-active-toggle.is-inactive {
   background: #e5e4e2;
-  color: var(--teal-dark);
+  color: var(--white);
   border: 1px solid rgba(0, 128, 128, 0.22);
   box-shadow: none;
 }
 
 .student-active-toggle {
-  width: 100%;
+  width: 40%;
   margin: 8px 0 14px;
   background: #e5e4e2;
   color: var(--teal-dark);
@@ -3181,6 +3181,17 @@ body.pdf-viewer-open #pdf-viewer-screen.screen {
   color: #14313a;
   background: #ffffff;
 }
+
+label[for="student-edit-group"],
+#student-edit-group {
+  width: 40%;
+  max-width: 400%;
+  display: block;
+}
+
+
+
+
 
 @media (max-width: 520px) {
   .managed-student-group-separator {
