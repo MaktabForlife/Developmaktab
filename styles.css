@@ -3189,8 +3189,38 @@ label[for="student-edit-group"],
   display: block;
 }
 
+.student-edit-two-column-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: end;
+}
 
+.student-edit-field-half {
+  min-width: 0;
+}
 
+.student-edit-field-half input,
+.student-edit-field-half button {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.student-edit-field-half .student-admin-label {
+  display: block;
+  width: 100%;
+}
+
+@media (max-width: 360px) {
+  .student-edit-two-column-row {
+    gap: 8px;
+  }
+
+  .student-edit-field-half .student-admin-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+  }
+}
 
 
 @media (max-width: 520px) {
