@@ -15,8 +15,15 @@ const state = {
 ========================= */
 
 window.addEventListener("load", initApp);
+window.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    closeStudentResourceModulePicker();
+  }
+});
 
 function initApp() {
+  setupPinDigitBoxes();
+
   const path = window.location.pathname;
   const parts = path.split("/").filter(Boolean);
 
@@ -36,7 +43,7 @@ function initApp() {
     return;
   }
 
-  document.getElementById("portal-title").innerText = "Maktab4Life";
+  document.getElementById("portal-title").innerText = "Reboot Your Maktab-mE";
   document.getElementById("portal-subtitle").innerText =
     "You require a personal URL to access the Maktab4Life Dashboard";
 }
@@ -51,11 +58,146 @@ function showScreen(id) {
   if (target) {
     target.classList.add("active");
   }
+
+  updateBottomNavigation(id);
 }
 
 function setError(message) {
   document.getElementById("auth-error").innerText = message || "";
 }
+
+function setupPinDigitBoxes() {
+  document.querySelectorAll(".pin-digit-row").forEach(row => {
+    const groupId = row.dataset.pinGroup;
+    const inputs = Array.from(row.querySelectorAll(".pin-digit"));
+    const hiddenInput = document.getElementById(groupId);
+
+    if (!groupId || inputs.length === 0) return;
+
+    const syncHiddenInput = () => {
+      if (hiddenInput) {
+        hiddenInput.value = inputs.map(input => input.value.replace(/\D/g, "")).join("");
+      }
+    };
+
+    const fillDigits = (digits, startIndex = 0) => {
+      const cleanDigits = String(digits || "").replace(/\D/g, "").slice(0, inputs.length);
+
+      if (!cleanDigits) {
+        syncHiddenInput();
+        return;
+      }
+
+      const fillFrom = cleanDigits.length >= inputs.length ? 0 : startIndex;
+
+      cleanDigits.split("").forEach((digit, offset) => {
+        const target = inputs[fillFrom + offset];
+        if (target) {
+          target.value = digit;
+        }
+      });
+
+      syncHiddenInput();
+
+      const nextIndex = Math.min(fillFrom + cleanDigits.length, inputs.length - 1);
+      inputs[nextIndex].focus();
+    };
+
+    inputs.forEach((input, index) => {
+      input.addEventListener("input", () => {
+        const digits = input.value.replace(/\D/g, "");
+
+        if (digits.length > 1) {
+          fillDigits(digits, index);
+          setError("");
+          return;
+        }
+
+        input.value = digits;
+
+        if (digits && index < inputs.length - 1) {
+          inputs[index + 1].focus();
+        }
+
+        syncHiddenInput();
+        setError("");
+      });
+
+      input.addEventListener("keydown", event => {
+        if (event.key === "Backspace" && !input.value && index > 0) {
+          inputs[index - 1].value = "";
+          inputs[index - 1].focus();
+          syncHiddenInput();
+        }
+
+        if (event.key === "ArrowLeft" && index > 0) {
+          event.preventDefault();
+          inputs[index - 1].focus();
+        }
+
+        if (event.key === "ArrowRight" && index < inputs.length - 1) {
+          event.preventDefault();
+          inputs[index + 1].focus();
+        }
+
+        if (event.key === "Enter") {
+          event.preventDefault();
+
+          if (groupId === "setup-pin") {
+            submitSetupPin();
+          } else if (groupId === "login-pin") {
+            submitLogin();
+          }
+        }
+      });
+
+      input.addEventListener("paste", event => {
+        event.preventDefault();
+        const pastedDigits = (event.clipboardData || window.clipboardData)
+          .getData("text")
+          .replace(/\D/g, "");
+
+        fillDigits(pastedDigits, index);
+        setError("");
+      });
+    });
+  });
+}
+
+function getPinValue(groupId) {
+  const row = document.querySelector(`.pin-digit-row[data-pin-group="${groupId}"]`);
+  const digitInputs = row ? Array.from(row.querySelectorAll(".pin-digit")) : [];
+
+  if (digitInputs.length) {
+    return digitInputs.map(input => input.value.replace(/\D/g, "")).join("");
+  }
+
+  const fallbackInput = document.getElementById(groupId);
+  return fallbackInput ? fallbackInput.value.trim() : "";
+}
+
+function clearPinValue(groupId) {
+  const row = document.querySelector(`.pin-digit-row[data-pin-group="${groupId}"]`);
+  const digitInputs = row ? Array.from(row.querySelectorAll(".pin-digit")) : [];
+  const hiddenInput = document.getElementById(groupId);
+
+  digitInputs.forEach(input => {
+    input.value = "";
+  });
+
+  if (hiddenInput) {
+    hiddenInput.value = "";
+  }
+}
+
+function focusFirstPinDigit(groupId) {
+  const firstInput = document.querySelector(`.pin-digit-row[data-pin-group="${groupId}"] .pin-digit`);
+
+  if (firstInput) {
+    setTimeout(() => firstInput.focus(), 50);
+  }
+}
+
 
 async function apiPost(path, body = {}, token = "") {
   const headers = {
@@ -92,14 +234,29 @@ async function checkStudent() {
 
     state.user = result.student;
 
-    document.getElementById("portal-title").innerText = "Student Login";
-    document.getElementById("portal-subtitle").innerText =
-      `Welcome ${result.student.username}`;
+
+
+document.getElementById("portal-title").innerHTML = `
+  Ahlan Wa Sahlan  ${result.student.username}
+`;
+
+    document.getElementById("portal-subtitle").innerHTML = `
+ <span class="login-heading">Reboot Your Maktab-mE</span>
+  <span class="login-welcome">
+    Student Login 
+  </span>
+`;
+
+
+
+
 
     if (result.student.pinsetup === true) {
       document.getElementById("login-pin-box").classList.remove("hidden");
+      focusFirstPinDigit("login-pin");
     } else {
       document.getElementById("setup-pin-box").classList.remove("hidden");
+      focusFirstPinDigit("setup-pin");
     }
   } catch (err) {
     setError("Unable to connect. Please try again.");
@@ -127,8 +284,10 @@ async function checkAdmin() {
 
     if (result.admin.pinsetup === true) {
       document.getElementById("login-pin-box").classList.remove("hidden");
+      focusFirstPinDigit("login-pin");
     } else {
       document.getElementById("setup-pin-box").classList.remove("hidden");
+      focusFirstPinDigit("setup-pin");
     }
   } catch (err) {
     setError("Unable to connect. Please try again.");
@@ -136,7 +295,7 @@ async function checkAdmin() {
 }
 
 async function submitSetupPin() {
-  const pin = document.getElementById("setup-pin").value.trim();
+  const pin = getPinValue("setup-pin");
 
   if (!/^\d{4}$/.test(pin)) {
     setError("PIN must be 4 digits.");
@@ -157,13 +316,16 @@ async function submitSetupPin() {
     return;
   }
 
+  clearPinValue("setup-pin");
+  clearPinValue("login-pin");
   document.getElementById("setup-pin-box").classList.add("hidden");
   document.getElementById("login-pin-box").classList.remove("hidden");
+  focusFirstPinDigit("login-pin");
   setError("");
 }
 
 async function submitLogin() {
-  const pin = document.getElementById("login-pin").value.trim();
+  const pin = getPinValue("login-pin");
 
   if (!/^\d{4}$/.test(pin)) {
     setError("PIN must be 4 digits.");
@@ -200,7 +362,7 @@ async function submitLogin() {
     if (studentHomeTitle) {
       studentHomeTitle.innerText = result.student.username || "Student";
     }
-    document.getElementById("student-welcome").innerText = "Student Home page";
+    document.getElementById("student-welcome");
     showScreen("student-home");
   }
 }
@@ -219,8 +381,336 @@ function goHome() {
   }
 }
 
+function setHomeIconButton(button, onclickValue = "goHome()") {
+  if (!button) return;
+
+  button.classList.add("home-icon-btn");
+  button.setAttribute("onclick", onclickValue);
+  button.setAttribute("aria-label", "Home");
+  button.setAttribute("title", "Home");
+  button.innerHTML = `
+    <span class="home-icon-btn__icon" aria-hidden="true"></span>
+    <span class="visually-hidden">Home</span>
+  `;
+}
+
+function setTextActionButton(button, text, onclickValue) {
+  if (!button) return;
+
+  button.classList.remove("home-icon-btn");
+  button.removeAttribute("aria-label");
+  button.removeAttribute("title");
+  button.textContent = text;
+
+  if (onclickValue) {
+    button.setAttribute("onclick", onclickValue);
+  }
+}
+
+
+/* =========================
+   REUSABLE BOTTOM NAVIGATION
+========================= */
+
+const BOTTOM_NAV_ITEMS = {
+  student: [
+    {
+      key: "home",
+      label: "Home",
+      icon: "/icons/home.svg",
+      action: "showScreen('student-home')"
+    },
+    {
+      key: "progress",
+      label: "Progress",
+      icon: "/icons/progress.svg",
+      action: "showStudentTasks()"
+    },
+    {
+      key: "resources",
+      label: "Resources",
+      icon: "/icons/resources.svg",
+      action: "showStudentResources()"
+    },
+    {
+      key: "video",
+      label: "Videos",
+      icon: "/icons/video.svg",
+      action: "openStudentResourceDirect('VIDEO')"
+    },
+    {
+      key: "ebooks",
+      label: "Ebooks",
+      icon: "/icons/ebook.svg",
+      action: "openStudentResourceDirect('EBOOKS')"
+    },
+    {
+      key: "audio",
+      label: "Audio",
+      icon: "/icons/audio.svg",
+      action: "openStudentResourceDirect('AUDIO')"
+    },
+    {
+      key: "other",
+      label: "Other",
+      icon: "/icons/other.svg",
+      action: "openStudentResourceDirect('OTHER')"
+    }
+  ],
+  admin: [
+    {
+      key: "home",
+      label: "Home",
+      icon: "/icons/home.svg",
+      action: "showScreen('admin-home')"
+    },
+    {
+      key: "progress",
+      label: "Progress",
+      icon: "/icons/progress.svg",
+      action: "showProgressReport()"
+    },
+    {
+      key: "resources",
+      label: "Resources",
+      icon: "/icons/resources.svg",
+      action: "showAdminResources()"
+    },
+    {
+      key: "attendance",
+      label: "Attendance",
+      icon: "/icons/attendance.svg",
+      action: "showAttendanceDashboard()"
+    },
+    {
+      key: "timetable",
+      label: "Timetable",
+      icon: "/icons/timetable.svg",
+      action: "showPlaceholder('Timetable')"
+    },
+    {
+      key: "admin",
+      label: "Admin",
+      icon: "/icons/admin.svg",
+      action: "showAdminAcademics()"
+    }
+  ]
+};
+
+function getBottomNavRole() {
+  const userType = String(state.userType || "").trim().toLowerCase();
+  const portalType = String(state.portalType || "").trim().toLowerCase();
+
+  if (userType === "admin" || portalType === "admin") return "admin";
+  if (userType === "student" || portalType === "student") return "student";
+
+  return "";
+}
+
+function getBottomNavElement() {
+  let nav = document.getElementById("bottom-nav");
+
+  if (!nav) {
+    nav = document.createElement("nav");
+    nav.id = "bottom-nav";
+    nav.className = "bottom-nav hidden";
+    nav.setAttribute("aria-label", "Primary navigation");
+    document.body.appendChild(nav);
+  }
+
+  installBottomNavigationGestureGuard(nav);
+  return nav;
+}
+
+function installBottomNavigationGestureGuard(nav) {
+  if (!nav || nav.dataset.gestureGuard === "true") return;
+
+  nav.dataset.gestureGuard = "true";
+
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  const stopInsideBottomNav = event => {
+    event.stopPropagation();
+  };
+
+  [
+    "pointerdown",
+    "pointermove",
+    "pointerup",
+    "pointercancel",
+    "mousedown",
+    "mousemove",
+    "mouseup",
+    "click",
+    "wheel"
+  ].forEach(eventName => {
+    nav.addEventListener(eventName, stopInsideBottomNav, { passive: true });
+  });
+
+  nav.addEventListener("touchstart", event => {
+    const touch = event.touches && event.touches[0];
+
+    touchStartX = touch ? touch.clientX : 0;
+    touchStartY = touch ? touch.clientY : 0;
+
+    event.stopPropagation();
+  }, { passive: true });
+
+  nav.addEventListener("touchmove", event => {
+    const touch = event.touches && event.touches[0];
+
+    event.stopPropagation();
+
+    if (!touch) return;
+
+    const deltaX = touch.clientX - touchStartX;
+    const deltaY = touch.clientY - touchStartY;
+    const isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+
+    if (!isHorizontalSwipe) return;
+
+    const maxScrollLeft = Math.max(0, nav.scrollWidth - nav.clientWidth);
+    const isAtLeftEdge = nav.scrollLeft <= 0;
+    const isAtRightEdge = nav.scrollLeft >= maxScrollLeft - 1;
+    const isSwipingRight = deltaX > 0;
+    const isSwipingLeft = deltaX < 0;
+
+    if (maxScrollLeft === 0 || (isAtLeftEdge && isSwipingRight) || (isAtRightEdge && isSwipingLeft)) {
+      event.preventDefault();
+    }
+  }, { passive: false });
+
+  ["touchend", "touchcancel"].forEach(eventName => {
+    nav.addEventListener(eventName, stopInsideBottomNav, { passive: true });
+  });
+}
+
+function renderBottomNavigation(role) {
+  const nav = getBottomNavElement();
+  const items = BOTTOM_NAV_ITEMS[role] || [];
+
+  if (nav.dataset.role === role && nav.children.length === items.length) {
+    return nav;
+  }
+
+  nav.dataset.role = role;
+  nav.innerHTML = items.map(item => `
+    <button
+      type="button"
+      class="bottom-nav__item"
+      data-bottom-nav-key="${item.key}"
+      onclick="${item.action}"
+      aria-label="${item.label}"
+    >
+      <span class="bottom-nav__icon" style="--bottom-nav-icon: url('${item.icon}')" aria-hidden="true"></span>
+      <span class="bottom-nav__label">${item.label}</span>
+    </button>
+  `).join("");
+
+  return nav;
+}
+
+function shouldShowBottomNavigation(screenId, role) {
+  if (!role || !state.token) return false;
+
+  const hiddenScreens = new Set([
+    "auth-screen",
+    "pdf-viewer-screen"
+  ]);
+
+  return !hiddenScreens.has(screenId);
+}
+
+function getBottomNavActiveKey(screenId, role) {
+  if (role === "student") {
+    if (screenId === "student-home") return "home";
+
+    if (["progress-subjects-screen", "progress-tasks-screen"].includes(screenId)) {
+      return "progress";
+    }
+
+    if (String(screenId || "").startsWith("student-resources")) {
+      const mode = String(currentStudentResourceMode || "").toUpperCase();
+
+      if (mode === "VIDEO") return "video";
+      if (mode === "EBOOKS") return "ebooks";
+      if (mode === "AUDIO") return "audio";
+      if (mode === "OTHER") return "other";
+
+      return "resources";
+    }
+
+    return "home";
+  }
+
+  if (role === "admin") {
+    if (screenId === "admin-home") return "home";
+
+    if (String(screenId || "").startsWith("attendance")) return "attendance";
+
+    if (String(screenId || "").startsWith("student-resources")) return "resources";
+
+    if ([
+      "progress-report",
+      "progress-subjects-screen",
+      "progress-tasks-screen",
+      "progress-task-students-screen",
+      "teacher-student-tasks"
+    ].includes(screenId)) {
+      return "progress";
+    }
+
+    if (String(screenId || "").startsWith("manage-student")) return "admin";
+
+    if (screenId === "placeholder-screen") {
+      return String(currentPlaceholderTitle || "").toLowerCase() === "timetable" ? "timetable" : "admin";
+    }
+
+    if (["admin-academics", "subjects-screen"].includes(screenId)) {
+      return "admin";
+    }
+
+    return "home";
+  }
+
+  return "";
+}
+
+function updateBottomNavigation(screenId) {
+  const role = getBottomNavRole();
+  const nav = renderBottomNavigation(role);
+  const isVisible = shouldShowBottomNavigation(screenId, role);
+
+  nav.classList.toggle("hidden", !isVisible);
+  document.body.classList.toggle("has-bottom-nav", isVisible);
+
+  const appShell = document.querySelector(".app-shell");
+  if (appShell) {
+    appShell.classList.toggle("has-bottom-nav", isVisible);
+  }
+
+  if (!isVisible) return;
+
+  const activeKey = getBottomNavActiveKey(screenId, role);
+
+  nav.querySelectorAll(".bottom-nav__item").forEach(item => {
+    const isActive = item.dataset.bottomNavKey === activeKey;
+    item.classList.toggle("is-active", isActive);
+    item.setAttribute("aria-current", isActive ? "page" : "false");
+  });
+
+  const activeItem = nav.querySelector(".bottom-nav__item.is-active");
+  if (activeItem) {
+    activeItem.scrollIntoView({ inline: "center", block: "nearest" });
+  }
+}
+
+let currentPlaceholderTitle = "";
+
 function showPlaceholder(title) {
-  document.getElementById("placeholder-title").innerText = title;
+  currentPlaceholderTitle = String(title || "").trim();
+  document.getElementById("placeholder-title").innerText = currentPlaceholderTitle || "Screen";
   showScreen("placeholder-screen");
 }
 
@@ -274,15 +764,12 @@ function setProgressScreensForStudent() {
   });
 
   const subjectBackButton = document.querySelector("#progress-subjects-screen .small-btn");
-  if (subjectBackButton) {
-    subjectBackButton.setAttribute("onclick", "showScreen('student-home')");
-  }
+  setHomeIconButton(subjectBackButton, "showScreen('student-home')");
 
   const taskBackButton = document.querySelector("#progress-tasks-screen .small-btn");
   if (taskBackButton) {
-    taskBackButton.innerText = "Save Changes →";
+    setTextActionButton(taskBackButton, "Save Changes →", "saveStudentTaskChangesAndReturn()");
     taskBackButton.classList.add("save-return-btn");
-    taskBackButton.setAttribute("onclick", "saveStudentTaskChangesAndReturn()");
   }
 }
 
@@ -295,15 +782,12 @@ function setProgressScreensForAdmin() {
   });
 
   const subjectBackButton = document.querySelector("#progress-subjects-screen .small-btn");
-  if (subjectBackButton) {
-    subjectBackButton.setAttribute("onclick", "showScreen('progress-report')");
-  }
+  setTextActionButton(subjectBackButton, "Back", "showScreen('progress-report')");
 
   const taskBackButton = document.querySelector("#progress-tasks-screen .small-btn");
   if (taskBackButton) {
-    taskBackButton.innerText = "BACK";
     taskBackButton.classList.remove("save-return-btn");
-    taskBackButton.setAttribute("onclick", "showScreen('progress-subjects-screen')");
+    setTextActionButton(taskBackButton, "Back", "showScreen('progress-subjects-screen')");
   }
 
   const taskStudentsBackButton = document.querySelector("#progress-task-students-screen .small-btn");
@@ -666,6 +1150,7 @@ let currentStudentResourceSubjectName = "";
 let currentStudentResourceSubjectCategoryCounts = {};
 let currentStudentResourceModuleKey = "";
 let currentStudentResourceModuleName = "";
+let currentStudentResourceDetailReturnScreen = "";
 let studentResourceViewMode = "student";
 const PDFJS_VIEWER_PATH = "/pdf-viewer/web/viewer.html";
 
@@ -700,14 +1185,27 @@ const STUDENT_RESOURCE_CATEGORIES = [
   }
 ];
 
+function resetStudentResourceSelection() {
+  currentStudentResourceMode = "";
+  currentStudentResourceSubjectKey = "";
+  currentStudentResourceSubjectName = "";
+  currentStudentResourceSubjectCategoryCounts = {};
+  currentStudentResourceModuleKey = "";
+  currentStudentResourceModuleName = "";
+  currentStudentResourceDetailReturnScreen = "";
+  closeStudentResourceModulePicker();
+}
+
 async function showStudentResources() {
   studentResourceViewMode = "student";
+  resetStudentResourceSelection();
   setResourceScreensForStudent();
   await loadResourceCategories("/api/resources/list", {});
 }
 
 async function showAdminResources() {
   studentResourceViewMode = "admin";
+  resetStudentResourceSelection();
   setResourceScreensForAdmin();
   await loadResourceCategories("/api/resources/list", {});
 }
@@ -724,28 +1222,16 @@ function setResourceScreensForStudent() {
   if (listTitle) listTitle.innerText = "Subjects";
 
   const listBackButton = document.querySelector("#student-resources-subjects .small-btn");
-  if (listBackButton) {
-    listBackButton.innerText = "Back";
-    listBackButton.setAttribute("onclick", "showScreen('student-home')");
-  }
+  setHomeIconButton(listBackButton, "showScreen('student-home')");
 
   const mediaBackButton = document.querySelector("#student-resources-media .small-btn");
-  if (mediaBackButton) {
-    mediaBackButton.innerText = "Back";
-    mediaBackButton.setAttribute("onclick", "showScreen('student-resources-subjects')");
-  }
+  setTextActionButton(mediaBackButton, "Back", "showScreen('student-resources-subjects')");
 
   const moduleBackButton = document.querySelector("#student-resources-modules .small-btn");
-  if (moduleBackButton) {
-    moduleBackButton.innerText = "Back";
-    moduleBackButton.setAttribute("onclick", "showScreen('student-resources-media')");
-  }
+  setTextActionButton(moduleBackButton, "Back", "showScreen('student-resources-media')");
 
   const detailBackButton = document.querySelector("#student-resources-detail .small-btn");
-  if (detailBackButton) {
-    detailBackButton.innerText = "Back";
-    detailBackButton.setAttribute("onclick", "goBackFromStudentResourceDetail()");
-  }
+  setTextActionButton(detailBackButton, "Back", "goBackFromStudentResourceDetail()");
 }
 
 function setResourceScreensForAdmin() {
@@ -760,28 +1246,49 @@ function setResourceScreensForAdmin() {
   if (listTitle) listTitle.innerText = "Subjects";
 
   const listBackButton = document.querySelector("#student-resources-subjects .small-btn");
-  if (listBackButton) {
-    listBackButton.innerText = "Back";
-    listBackButton.setAttribute("onclick", "showScreen('admin-home')");
-  }
+  setHomeIconButton(listBackButton, "showScreen('admin-home')");
 
   const mediaBackButton = document.querySelector("#student-resources-media .small-btn");
-  if (mediaBackButton) {
-    mediaBackButton.innerText = "Back";
-    mediaBackButton.setAttribute("onclick", "showScreen('student-resources-subjects')");
-  }
+  setTextActionButton(mediaBackButton, "Back", "showScreen('student-resources-subjects')");
 
   const moduleBackButton = document.querySelector("#student-resources-modules .small-btn");
-  if (moduleBackButton) {
-    moduleBackButton.innerText = "Back";
-    moduleBackButton.setAttribute("onclick", "showScreen('student-resources-media')");
-  }
+  setTextActionButton(moduleBackButton, "Back", "showScreen('student-resources-media')");
 
   const detailBackButton = document.querySelector("#student-resources-detail .small-btn");
-  if (detailBackButton) {
-    detailBackButton.innerText = "Back";
-    detailBackButton.setAttribute("onclick", "goBackFromStudentResourceDetail()");
+  setTextActionButton(detailBackButton, "Back", "goBackFromStudentResourceDetail()");
+}
+
+async function fetchResourceCategories(apiPath, body = {}) {
+  let result = await apiPost(apiPath, body, state.token);
+
+  // Temporary compatibility fallback while the Worker routes are being stabilised.
+  // Resources are now common to students and staff, so all resource routes should return the same library.
+  if (!result.success && String(result.error || "").toLowerCase() === "not found") {
+    const fallbackPaths = [
+      "/api/resources/list",
+      "/api/student/resources/list",
+      "/api/admin/resources/list"
+    ].filter(path => path !== apiPath);
+
+    for (const fallbackPath of fallbackPaths) {
+      const fallbackResult = await apiPost(fallbackPath, body, state.token);
+      if (fallbackResult && fallbackResult.success) {
+        result = fallbackResult;
+        break;
+      }
+    }
   }
+
+  if (!result.success) {
+    throw new Error(result.error || "Failed to load resources");
+  }
+
+  // New backend response is grouped by media type: result.groups.
+  // Older response shape used result.subjects. Keep both supported for safety.
+  studentResourceSubjects = Array.isArray(result.subjects) ? result.subjects : [];
+  studentResourceGroupsByType = normalizeStudentResourceGroups(result);
+
+  return result;
 }
 
 async function loadResourceCategories(apiPath, body = {}) {
@@ -791,39 +1298,45 @@ async function loadResourceCategories(apiPath, body = {}) {
   container.innerHTML = `<p class="helper-text">Loading resources...</p>`;
 
   try {
-    let result = await apiPost(apiPath, body, state.token);
-
-    // Temporary compatibility fallback while the Worker routes are being stabilised.
-    // Resources are now common to students and staff, so all resource routes should return the same library.
-    if (!result.success && String(result.error || "").toLowerCase() === "not found") {
-      const fallbackPaths = [
-        "/api/resources/list",
-        "/api/student/resources/list",
-        "/api/admin/resources/list"
-      ].filter(path => path !== apiPath);
-
-      for (const fallbackPath of fallbackPaths) {
-        const fallbackResult = await apiPost(fallbackPath, body, state.token);
-        if (fallbackResult && fallbackResult.success) {
-          result = fallbackResult;
-          break;
-        }
-      }
-    }
-
-    if (!result.success) {
-      container.innerHTML = `<p class="error-message">${escapeHtml(result.error || "Failed to load resources")}</p>`;
-      return;
-    }
-
-    // New backend response is grouped by media type: result.groups.
-    // Older response shape used result.subjects. Keep both supported for safety.
-    studentResourceSubjects = Array.isArray(result.subjects) ? result.subjects : [];
-    studentResourceGroupsByType = normalizeStudentResourceGroups(result);
-
+    await fetchResourceCategories(apiPath, body);
     renderStudentResourceSubjects();
   } catch (err) {
-    container.innerHTML = `<p class="error-message">Unable to load resources. Please try again.</p>`;
+    container.innerHTML = `<p class="error-message">${escapeHtml(err.message || "Unable to load resources. Please try again.")}</p>`;
+  }
+}
+
+async function openStudentResourceDirect(categoryKey) {
+  const category = STUDENT_RESOURCE_CATEGORIES.find(item => item.key === String(categoryKey || "").toUpperCase());
+
+  if (!category) {
+    alert("Resource category not found. Please reload resources.");
+    return;
+  }
+
+  studentResourceViewMode = "student";
+  setResourceScreensForStudent();
+  currentStudentResourceMode = category.key;
+  currentStudentResourceSubjectKey = "";
+  currentStudentResourceSubjectName = "";
+  currentStudentResourceSubjectCategoryCounts = {};
+  currentStudentResourceModuleKey = "";
+  currentStudentResourceModuleName = "";
+
+  const title = document.getElementById("student-resource-detail-title");
+  const container = document.getElementById("student-resource-detail-content");
+
+  if (title) title.innerText = category.label;
+  if (container) container.innerHTML = `<p class="helper-text">Loading ${escapeHtml(category.label)} resources...</p>`;
+
+  showScreen("student-resources-detail");
+
+  try {
+    await fetchResourceCategories("/api/resources/list", {});
+    renderStudentResourceCategoryDetail(category);
+  } catch (err) {
+    if (container) {
+      container.innerHTML = `<p class="error-message">${escapeHtml(err.message || "Unable to load resources. Please try again.")}</p>`;
+    }
   }
 }
 
@@ -873,6 +1386,19 @@ function normalizeStudentResourceGroups(result) {
 function getCategoryLabel(type) {
   const category = STUDENT_RESOURCE_CATEGORIES.find(item => item.key === String(type || "").toUpperCase());
   return category ? category.label : String(type || "Resources");
+}
+
+function getResourceCategoryIconPath(categoryKey) {
+  const key = String(categoryKey || "").trim().toUpperCase();
+  const iconMap = {
+    EBOOKS: "/icons/ebook.svg",
+    PRINTABLES: "/icons/printables.svg",
+    AUDIO: "/icons/audio.svg",
+    VIDEO: "/icons/video.svg",
+    OTHER: "/icons/other.svg"
+  };
+
+  return iconMap[key] || "/icons/resources.svg";
 }
 
 function getDirectMediaGroup(category) {
@@ -1156,6 +1682,8 @@ function renderStudentResourceSubjects() {
   currentStudentResourceSubjectCategoryCounts = {};
   currentStudentResourceModuleKey = "";
   currentStudentResourceModuleName = "";
+  currentStudentResourceDetailReturnScreen = "";
+  closeStudentResourceModulePicker();
 
   const subjects = buildStudentResourceSubjectSummaries();
 
@@ -1164,16 +1692,168 @@ function renderStudentResourceSubjects() {
     return;
   }
 
+  const visibleCategories = STUDENT_RESOURCE_CATEGORIES.filter(category => {
+    return subjects.some(subject => Number(subject.categoryCounts[category.key] || 0) > 0);
+  });
+
+  if (visibleCategories.length === 0) {
+    container.innerHTML = `<p class="helper-text">No resources are available yet.</p>`;
+    return;
+  }
+
+  const columnStyle = `--resource-media-columns: ${visibleCategories.length};`;
+
   container.innerHTML = `
-    <div class="resource-subject-button-grid">
-      ${subjects.map(subject => `
-        <button class="resource-subject-drill-button" onclick="openStudentResourceSubject('${escapeForAttribute(subject.key)}')">
-          <span class="resource-subject-button-title">${escapeHtml(subject.name)}</span>
-        </button>
-      `).join("")}
+    <div class="resource-media-matrix-wrap" style="${columnStyle}">
+      <div class="resource-media-matrix" role="table" aria-label="Resources by subject and media type">
+        <div class="resource-media-row resource-media-header" role="row">
+          <div class="resource-media-subject-cell" role="columnheader">Subject</div>
+          ${visibleCategories.map(category => `
+            <div class="resource-media-cell" role="columnheader">
+              <span
+                class="resource-media-icon"
+                style="--resource-media-icon: url('${getResourceCategoryIconPath(category.key)}')"
+                title="${escapeForAttribute(category.label)}"
+                aria-label="${escapeForAttribute(category.label)}"
+              ></span>
+            </div>
+          `).join("")}
+        </div>
+
+        ${subjects.map(subject => `
+          <div class="resource-media-row" role="row">
+            <div class="resource-media-subject-cell" role="cell">
+              <span class="resource-media-subject-name">${escapeHtml(subject.name)}</span>
+            </div>
+            ${visibleCategories.map(category => {
+              const count = Number(subject.categoryCounts[category.key] || 0);
+
+              if (count <= 0) {
+                return `<div class="resource-media-cell resource-media-cell-empty" role="cell" aria-label="No ${escapeForAttribute(category.label)} resources"></div>`;
+              }
+
+              return `
+                <div class="resource-media-cell" role="cell">
+                  <button
+                    type="button"
+                    class="resource-media-icon-button"
+                    onclick="openStudentResourceMatrixSelection('${escapeForAttribute(subject.key)}', '${escapeForAttribute(category.key)}')"
+                    aria-label="Open ${escapeForAttribute(category.label)} resources for ${escapeForAttribute(subject.name)}"
+                    title="${escapeForAttribute(category.label)}"
+                  >
+                    <span
+                      class="resource-media-icon"
+                      style="--resource-media-icon: url('${getResourceCategoryIconPath(category.key)}')"
+                      aria-hidden="true"
+                    ></span>
+                  </button>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        `).join("")}
+      </div>
     </div>
   `;
 }
+
+function openStudentResourceMatrixSelection(subjectKey, categoryKey) {
+  const subjects = buildStudentResourceSubjectSummaries();
+  const selectedSubject = subjects.find(subject => subject.key === subjectKey);
+  const category = STUDENT_RESOURCE_CATEGORIES.find(item => item.key === String(categoryKey || "").toUpperCase());
+
+  if (!selectedSubject || !category) {
+    alert("Resource selection not found. Please reload resources.");
+    return;
+  }
+
+  currentStudentResourceSubjectKey = selectedSubject.key;
+  currentStudentResourceSubjectName = selectedSubject.name;
+  currentStudentResourceSubjectCategoryCounts = { ...(selectedSubject.categoryCounts || {}) };
+  currentStudentResourceMode = category.key;
+  currentStudentResourceModuleKey = "";
+  currentStudentResourceModuleName = "";
+  currentStudentResourceDetailReturnScreen = "student-resources-subjects";
+
+  const modules = buildCurrentResourceModuleSummaries(category);
+
+  if (modules.length > 1) {
+    showStudentResourceModulePicker(category, modules);
+    return;
+  }
+
+  if (modules.length === 1) {
+    currentStudentResourceModuleKey = modules[0].key;
+    currentStudentResourceModuleName = modules[0].name;
+  }
+
+  const title = document.getElementById("student-resource-detail-title");
+  if (title) {
+    title.innerText = `${selectedSubject.name} - ${category.label}`;
+  }
+
+  showScreen("student-resources-detail");
+  renderStudentResourceCategoryDetail(category);
+}
+
+function getStudentResourceModulePickerElement() {
+  let picker = document.getElementById("resource-module-picker");
+
+  if (!picker) {
+    picker = document.createElement("div");
+    picker.id = "resource-module-picker";
+    picker.className = "resource-module-picker hidden";
+    picker.setAttribute("aria-hidden", "true");
+    document.body.appendChild(picker);
+  }
+
+  return picker;
+}
+
+function showStudentResourceModulePicker(category, modules) {
+  const picker = getStudentResourceModulePickerElement();
+  const subjectName = currentStudentResourceSubjectName || "Subject";
+
+  picker.innerHTML = `
+    <div class="resource-module-picker__backdrop" onclick="closeStudentResourceModulePicker()"></div>
+    <div class="resource-module-picker__panel" role="dialog" aria-modal="true" aria-labelledby="resource-module-picker-title">
+      <div class="resource-module-picker__header">
+        <div>
+          <h3 id="resource-module-picker-title">Choose Module</h3>
+          <p class="mini-text">${escapeHtml(subjectName)} - ${escapeHtml(category.label)}</p>
+        </div>
+        <button type="button" class="resource-module-picker__close" onclick="closeStudentResourceModulePicker()" aria-label="Close module picker">×</button>
+      </div>
+      <div class="resource-module-picker__list">
+        ${modules.map(module => `
+          <button
+            type="button"
+            class="resource-module-picker__option"
+            onclick="openStudentResourceModule('${escapeForAttribute(module.key)}', 'student-resources-subjects')"
+          >
+            <span>${escapeHtml(module.name)}</span>
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `;
+
+  picker.classList.remove("hidden");
+  picker.setAttribute("aria-hidden", "false");
+  document.body.classList.add("resource-module-picker-open");
+}
+
+function closeStudentResourceModulePicker() {
+  const picker = document.getElementById("resource-module-picker");
+
+  if (!picker) return;
+
+  picker.classList.add("hidden");
+  picker.setAttribute("aria-hidden", "true");
+  picker.innerHTML = "";
+  document.body.classList.remove("resource-module-picker-open");
+}
+
 
 function openStudentResourceSubject(subjectKey) {
   const subjects = buildStudentResourceSubjectSummaries();
@@ -1239,10 +1919,11 @@ function openStudentResourceCategory(categoryKey, knownCount = null) {
   currentStudentResourceMode = categoryKey;
   currentStudentResourceModuleKey = "";
   currentStudentResourceModuleName = "";
+  currentStudentResourceDetailReturnScreen = currentStudentResourceSubjectKey ? "student-resources-media" : "";
 
-  const distinctModuleIdCount = countDistinctModuleIdsForCurrentResourceCategory(category);
+  const availableModules = buildCurrentResourceModuleSummaries(category);
 
-  if (distinctModuleIdCount > 1) {
+  if (availableModules.length > 1) {
     const title = document.getElementById("student-resource-module-title");
     if (title) {
       title.innerText = currentStudentResourceSubjectName ? `${currentStudentResourceSubjectName} - ${category.label}` : category.label;
@@ -1356,7 +2037,9 @@ function renderStudentResourceModules(category) {
   `;
 }
 
-function openStudentResourceModule(moduleKey) {
+function openStudentResourceModule(moduleKey, returnScreen = "student-resources-modules") {
+  closeStudentResourceModulePicker();
+
   const category = STUDENT_RESOURCE_CATEGORIES.find(item => item.key === currentStudentResourceMode);
 
   if (!category) {
@@ -1373,6 +2056,7 @@ function openStudentResourceModule(moduleKey) {
 
   currentStudentResourceModuleKey = selectedModule.key;
   currentStudentResourceModuleName = selectedModule.name;
+  currentStudentResourceDetailReturnScreen = returnScreen;
 
   const title = document.getElementById("student-resource-detail-title");
   if (title) {
@@ -1384,8 +2068,24 @@ function openStudentResourceModule(moduleKey) {
 }
 
 function goBackFromStudentResourceDetail() {
+  closeStudentResourceModulePicker();
+
+  if (currentStudentResourceDetailReturnScreen) {
+    showScreen(currentStudentResourceDetailReturnScreen);
+    return;
+  }
+
   if (currentStudentResourceModuleKey) {
     showScreen("student-resources-modules");
+    return;
+  }
+
+  if (!currentStudentResourceSubjectKey) {
+    if (studentResourceViewMode === "admin") {
+      showAdminResources();
+    } else {
+      showStudentResources();
+    }
     return;
   }
 
@@ -2362,13 +3062,13 @@ function renderManageStudentResultScreen(context) {
     ? `
       <div class="student-admin-action-grid two-col">
         <button type="button" onclick="registerAnotherManagedStudent()">Register Another Student</button>
-        <button type="button" onclick="showScreen('admin-home')">Exit to Dashboard</button>
+        <button type="button" class="home-text-action-btn" onclick="showScreen('admin-home')"><span class="home-text-action-btn__icon" aria-hidden="true"></span><span>Exit to Dashboard</span></button>
       </div>
     `
     : `
       <div class="student-admin-action-grid two-col">
         <button type="button" onclick="backToManagedStudentList()">Back to Student List</button>
-        <button type="button" onclick="showScreen('admin-home')">Exit to Dashboard</button>
+        <button type="button" class="home-text-action-btn" onclick="showScreen('admin-home')"><span class="home-text-action-btn__icon" aria-hidden="true"></span><span>Exit to Dashboard</span></button>
       </div>
     `;
 
@@ -2717,34 +3417,46 @@ function renderSelectedStudentEditor() {
       <label class="student-admin-label" for="student-edit-whatsapp">WhatsApp Number</label>
       <input id="student-edit-whatsapp" class="student-prefilled-input" type="tel" inputmode="tel" value="${escapeAttribute(student.whatsapp6 || "")}" />
 
-      <label class="student-admin-label" for="student-edit-group">Group</label>
-      <input id="student-edit-group" class="student-prefilled-input" type="number" inputmode="numeric" min="0" value="${escapeAttribute(student.classgroup || DEFAULT_STUDENT_GROUP)}" />
-
       <div class="student-edit-two-column-row">
-  <div class="student-edit-field-half">
-    <label class="student-admin-label" for="student-edit-group">Group</label>
-    <input
-      id="student-edit-group"
-      class="student-prefilled-input"
-      type="number"
-      inputmode="numeric"
-      min="0"
-      value="${escapeAttribute(student.classgroup || DEFAULT_STUDENT_GROUP)}"
-    />
-  </div>
+        <div class="student-edit-field-half">
+          <label class="student-admin-label" for="student-edit-group">Group</label>
+          <input
+            id="student-edit-group"
+            class="student-prefilled-input"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            value="${escapeAttribute(student.classgroup || DEFAULT_STUDENT_GROUP)}"
+          />
+        </div>
 
-  <div class="student-edit-field-half">
-    <label class="student-admin-label">Active Status</label>
-    <button
-      id="student-edit-active-btn"
-      class="student-active-toggle"
-      type="button"
-      onclick="toggleStudentEditActiveStatus()"
-    >
-      Active
-    </button>
-  </div>
-</div>
+        <div class="student-edit-field-half">
+          <label class="student-admin-label">Active Status</label>
+          <div class="student-admin-radio-group student-edit-status-radio-group" role="radiogroup" aria-label="Active Status">
+            <label class="student-admin-radio-row student-edit-status-radio ${manageStudentsState.selectedStudentActiveDraft === true ? "is-selected" : ""}">
+              <input
+                type="radio"
+                name="student-edit-active"
+                value="true"
+                ${manageStudentsState.selectedStudentActiveDraft === true ? "checked" : ""}
+                onchange="setStudentEditActiveStatus(true)"
+              />
+              <span>Active</span>
+            </label>
+
+            <label class="student-admin-radio-row student-edit-status-radio ${manageStudentsState.selectedStudentActiveDraft === true ? "" : "is-selected"}">
+              <input
+                type="radio"
+                name="student-edit-active"
+                value="false"
+                ${manageStudentsState.selectedStudentActiveDraft === true ? "" : "checked"}
+                onchange="setStudentEditActiveStatus(false)"
+              />
+              <span>Inactive</span>
+            </label>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="student-admin-action-grid">
@@ -2757,16 +3469,17 @@ function renderSelectedStudentEditor() {
   `;
 }
 
+function setStudentEditActiveStatus(isActive) {
+  manageStudentsState.selectedStudentActiveDraft = isActive === true;
+
+  document.querySelectorAll(".student-edit-status-radio").forEach(option => {
+    const input = option.querySelector("input");
+    option.classList.toggle("is-selected", !!input && input.checked);
+  });
+}
+
 function toggleSelectedStudentActive() {
-  manageStudentsState.selectedStudentActiveDraft = !manageStudentsState.selectedStudentActiveDraft;
-
-  const button = document.querySelector(".student-active-toggle");
-  if (!button) return;
-
-  button.classList.toggle("is-active", manageStudentsState.selectedStudentActiveDraft);
-  button.classList.toggle("is-inactive", !manageStudentsState.selectedStudentActiveDraft);
-  button.dataset.active = manageStudentsState.selectedStudentActiveDraft ? "true" : "false";
-  button.textContent = manageStudentsState.selectedStudentActiveDraft ? "Active" : "Inactive";
+  setStudentEditActiveStatus(!manageStudentsState.selectedStudentActiveDraft);
 }
 
 async function saveManagedStudentChanges() {
@@ -2778,9 +3491,9 @@ async function saveManagedStudentChanges() {
   const username = document.getElementById("student-edit-name").value.trim();
   const whatsappRaw = document.getElementById("student-edit-whatsapp").value.trim();
   const classgroup = document.getElementById("student-edit-group").value.trim() || String(DEFAULT_STUDENT_GROUP);
-  const activeButton = document.getElementById("student-edit-active");
-  const active = activeButton
-    ? activeButton.dataset.active === "true"
+  const activeRadio = document.querySelector('input[name="student-edit-active"]:checked');
+  const active = activeRadio
+    ? activeRadio.value === "true"
     : manageStudentsState.selectedStudentActiveDraft === true;
 
   if (!username) {
@@ -2870,22 +3583,48 @@ function renderStudentMessageResult(student, context) {
   return `
     <div class="student-admin-result-card">
       <div class="student-admin-card-title">${context === "registered" ? "Student Registered" : "Student Link"}</div>
-      <div class="student-link-box">${escapeHtml(loginLink)}</div>
+
+      <div class="student-link-box student-icon-field">
+        <span class="student-link-text">${escapeHtml(loginLink)}</span>
+        <button
+          type="button"
+          class="student-copy-icon-btn"
+          onclick="copyStudentLoginLink('${escapeJsString(loginLink)}')"
+          aria-label="Copy student link"
+          title="Copy student link"
+        >
+          <img src="/icons/copy.svg" alt="" class="student-copy-icon" />
+        </button>
+      </div>
       ${assignmentLine}
 
       <label class="student-admin-label" for="${messageBoxId}">WhatsApp Message</label>
-      <textarea
-        id="${messageBoxId}"
-        class="student-message-textarea"
-        rows="11"
-      >${escapeHtml(message)}</textarea>
-      <p class="student-admin-help">You can edit this message before copying it or opening WhatsApp.</p>
-
-      <div class="student-admin-action-grid three-col">
-        <button type="button" onclick="copyStudentLoginLink('${escapeJsString(loginLink)}')">Copy Link</button>
-        <button type="button" onclick="copyStudentWelcomeMessageFromBox('${escapeJsString(messageBoxId)}', '${escapeJsString(loginLink)}')">Copy Message</button>
-        <button type="button" onclick="openStudentWhatsAppMessageFromBox('${escapeJsString(messageBoxId)}', '${escapeJsString(loginLink)}')">Open WhatsApp</button>
+      <div class="student-message-box-wrap">
+        <textarea
+          id="${messageBoxId}"
+          class="student-message-textarea student-icon-field-textarea"
+          rows="11"
+        >${escapeHtml(message)}</textarea>
+        <button
+          type="button"
+          class="student-copy-icon-btn student-message-copy-btn"
+          onclick="copyStudentWelcomeMessageFromBox('${escapeJsString(messageBoxId)}', '${escapeJsString(loginLink)}')"
+          aria-label="Copy WhatsApp message"
+          title="Copy WhatsApp message"
+        >
+          <img src="/icons/copy.svg" alt="" class="student-copy-icon" />
+        </button>
       </div>
+
+      <button
+        type="button"
+        class="student-whatsapp-icon-btn"
+        onclick="openStudentWhatsAppMessageFromBox('${escapeJsString(messageBoxId)}', '${escapeJsString(loginLink)}')"
+        aria-label="Open WhatsApp message"
+        title="Open WhatsApp message"
+      >
+        <img src="/icons/whatsapp.svg" alt="WhatsApp" class="student-whatsapp-icon" />
+      </button>
     </div>
   `;
 }
@@ -2924,19 +3663,24 @@ function buildStudentLoginLink(uniqueid) {
 
 function buildStudentWelcomeMessage(loginLink) {
   return [
-    "Assalamu alaykum",
+    " As-salamu alaykum wa rahmatullahi wa barakatuh",
     "",
-    "This is your link to your personal Maktab Resources access.",
+    "Your personal link to Maktab-mE (Maktab mobile & E-resources) is attached",
+     "",
+    "Insha Allah it wil assist you in this journey. After you click the link....",
+     "",
+    "1. CREATE an easy to remember pin if you are a new user",
     "",
-    "1. The first time you log in, you will be asked to create your own 4-digit PIN.",
+    "2. LOGIN with your pin ",
     "",
-    "2. Use the PIN you created to log in immediately. Please remember this PIN for future access.",
-    "",
-    "3. Once you have logged in, you should add the app to your homescreen for easier access.",
+    "3. ADD the app to your homescreen",
     "",
     loginLink,
     "",
-    "JazakAllah khayr"
+    "Please contact me for any queries or if you need to reset your PIN.",
+  
+   "May Allah bless you on this journey and make your path to Jannah easy"
+
   ].join("\n");
 }
 
@@ -4125,7 +4869,28 @@ function escapeHtml(value) {
    MANUAL REFRESH BUTTONS
 ========================= */
 
-function setManualRefreshButton(screenId, handlerName, label = "↻") {
+function getRefreshIconMarkup() {
+  return `
+    <span class="manual-refresh-btn__icon" aria-hidden="true"></span>
+    <span class="visually-hidden">Refresh</span>
+  `;
+}
+
+function getManualRefreshButtonMarkup(onclickValue) {
+  return `
+    <button
+      type="button"
+      class="small-btn manual-refresh-btn"
+      title="Refresh"
+      aria-label="Refresh"
+      onclick="${onclickValue}"
+    >
+      ${getRefreshIconMarkup()}
+    </button>
+  `;
+}
+
+function setManualRefreshButton(screenId, handlerName) {
   const screen = document.getElementById(screenId);
   if (!screen) return;
 
@@ -4140,7 +4905,7 @@ function setManualRefreshButton(screenId, handlerName, label = "↻") {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "small-btn manual-refresh-btn";
-  button.innerText = label;
+  button.innerHTML = getRefreshIconMarkup();
   button.setAttribute("aria-label", "Refresh");
   button.setAttribute("title", "Refresh");
   button.setAttribute("onclick", handlerName);
@@ -4166,12 +4931,13 @@ function confirmRefreshIfUnsaved() {
 }
 
 async function runManualRefresh(button, callback) {
-  const refreshButton = button || event?.target;
-  const originalText = refreshButton ? refreshButton.innerText : "↻";
+  const refreshButton = button?.closest
+    ? button.closest(".manual-refresh-btn")
+    : button || event?.target?.closest?.(".manual-refresh-btn") || event?.target;
 
   if (refreshButton) {
     refreshButton.disabled = true;
-    refreshButton.innerText = "Updating...";
+    refreshButton.classList.add("is-refreshing");
   }
 
   try {
@@ -4179,7 +4945,7 @@ async function runManualRefresh(button, callback) {
   } finally {
     if (refreshButton) {
       refreshButton.disabled = false;
-      refreshButton.innerText = originalText;
+      refreshButton.classList.remove("is-refreshing");
     }
   }
 }
@@ -4504,7 +5270,7 @@ async function renderViewAttendanceScreen(startDate, endDate) {
   let html = `
     <div class="nav-header">
       <h2>View Attendance Records</h2>
-      <button class="small-btn manual-refresh-btn" title="Refresh" aria-label="Refresh" onclick="refreshViewAttendance(this)">↻</button>
+      ${getManualRefreshButtonMarkup("refreshViewAttendance(this)")}
       <button class="small-btn" onclick="showScreen('attendance-dashboard')">Back</button>
     </div>
 
@@ -4586,7 +5352,7 @@ async function renderAttendanceStatsScreen(startDate, endDate) {
   let html = `
     <div class="nav-header">
       <h2>Statistics</h2>
-      <button class="small-btn manual-refresh-btn" title="Refresh" aria-label="Refresh" onclick="refreshAttendanceStats(this)">↻</button>
+      ${getManualRefreshButtonMarkup("refreshAttendanceStats(this)")}
       <button class="small-btn" onclick="showScreen('attendance-dashboard')">Back</button>
     </div>
 
